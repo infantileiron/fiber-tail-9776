@@ -5,6 +5,7 @@ class Role(StrEnum):
     REVIEWER = "reviewer"
     ANALYST = "analyst"
     OBSERVER = "observer"
+    PURCHASER = "purchaser"
 
 
 class RunStatus(StrEnum):
@@ -17,6 +18,17 @@ class Outcome(StrEnum):
     ACCEPT = "accept"
     RETEST = "retest"
     REJECT = "reject"
+
+
+class SettlementStatus(StrEnum):
+    DRAFT = "draft"
+    LOCKED = "locked"
+
+
+class DeductionKind(StrEnum):
+    BASE = "base"
+    REVISION = "revision"
+    LATE = "late"
 
 
 MIN_SAMPLES = 3

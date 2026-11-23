@@ -53,3 +53,11 @@ class RunInput(Input):
 class DecisionInput(Input):
     outcome: Outcome
     rationale: Annotated[str, StringConstraints(min_length=4, max_length=400)]
+
+
+class SettlementInput(Input):
+    supplier: ShortText
+    period: Annotated[str, StringConstraints(pattern=r"^[0-9]{4}-(0[1-9]|1[0-2])$")]
+    idempotency_key: Annotated[str, StringConstraints(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9._:-]+$")]
+    note: Annotated[str, StringConstraints(max_length=200)] = ""
+

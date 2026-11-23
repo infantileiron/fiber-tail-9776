@@ -14,6 +14,7 @@ USERS = (
     ("analyst", "许青·称重分析", "cotton-scale"),
     ("reviewer", "梁禾·收料复核", "cotton-review"),
     ("observer", "周芜·仓务观察", "cotton-view"),
+    ("purchaser", "陈叙·采购结算", "cotton-buy"),
 )
 LOTS = (
     ("MD-1121-01", "白檀分拣站", "浅色牛仔边角料", 3200, (700, 550, 600, 500, 650, 700), (7, 11, 9, 5, 13, 14)),

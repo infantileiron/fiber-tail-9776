@@ -7,14 +7,20 @@ import {diagnosisPage} from './pages/diagnosis.js';
 import {loginPage} from './pages/login.js';
 import {lotsPage} from './pages/lots.js';
 import {samplesPage} from './pages/samples.js';
+import {settlementsPage} from './pages/settlements.js';
 import {locationView, route, sections} from './router/location.js';
-import {isObserver, login, logout, restore, state} from './stores/workbench.js';
+import {isObserver, isPurchaser, login, logout, restore, state} from './stores/workbench.js';
 import {RunStatus} from './types/domain.js';
 import {esc, version} from './utils/format.js';
 
 const root = document.querySelector('#app');
-const pages = {lots: lotsPage, samples: samplesPage, diagnosis: diagnosisPage, decisions: decisionsPage};
-const demoPassword = {analyst: 'cotton-scale', reviewer: 'cotton-review', observer: 'cotton-view'};
+const pages = {
+    lots: lotsPage, samples: samplesPage, diagnosis: diagnosisPage,
+    decisions: decisionsPage, settlements: settlementsPage,
+};
+const demoPassword = {
+    analyst: 'cotton-scale', reviewer: 'cotton-review', observer: 'cotton-view', purchaser: 'cotton-buy',
+};
 let revision = 0;
 let pollTimer;
 
@@ -42,13 +48,14 @@ function showLogin() {
 
 function shell(page, activeLot, content) {
     const current = sections.find(([key]) => key === page)[1];
+    const lotScoped = ['samples', 'diagnosis', 'decisions'].includes(page);
     root.innerHTML = `<div class="app-shell"><aside class="rail">
         <a class="rail-brand" href="#lots">${mark}<span>棉渡再生<small>来料质检组</small></span></a>
-        <nav aria-label="来料验收流程">${sections.map(([key, label], index) => `<a href="${route(key, key === 'lots' ? null : activeLot)}"
+        <nav aria-label="来料验收流程">${sections.map(([key, label], index) => `<a href="${route(key, ['lots', 'settlements'].includes(key) ? null : activeLot)}"
         ${page === key ? 'aria-current="page"' : ''}><span aria-hidden="true">0${index + 1}</span>${label}</a>`).join('')}</nav>
         <div class="user-box"><p>${esc(state.user.display_name)}</p><span>${roleLabel[state.user.role]}</span><button id="logout" type="button">退出</button></div></aside>
         <div class="app-main"><header class="topline"><span>入厂验收工作簿 <b>/</b> ${current}</span>
-        ${page !== 'lots' && state.lots.length ? `<label class="switch-label">切换批号<select id="lot-switch">${state.lots.map(lot => `<option value="${lot.id}" ${lot.id === activeLot ? 'selected' : ''}>${esc(lot.code)} · ${esc(lot.supplier)}</option>`).join('')}</select></label>` : ''}
+        ${lotScoped && state.lots.length ? `<label class="switch-label">切换批号<select id="lot-switch">${state.lots.map(lot => `<option value="${lot.id}" ${lot.id === activeLot ? 'selected' : ''}>${esc(lot.code)} · ${esc(lot.supplier)}</option>`).join('')}</select></label>` : ''}
         </header><main id="content" class="content">${content}</main></div></div>`;
     document.querySelector('#lot-switch')?.addEventListener('change', event => navigate(page, Number(event.target.value)));
     document.querySelector('#logout').addEventListener('click', endSession);
@@ -95,6 +102,35 @@ function bindActions() {
             notify(error.message, true);
         }
     });
+    bindSettlementActions();
+}
+
+function bindSettlementActions() {
+    document.querySelector('#open-settlement')?.addEventListener('click', () => document.querySelector('#settlement-dialog').showModal());
+    document.querySelector('#close-settlement')?.addEventListener('click', () => document.querySelector('#settlement-dialog').close());
+    submitForm('#settlement-form', async values => {
+        const created = await post('/settlements', values);
+        notify(created.created ? `已生成 ${values.period} 结算草稿` : `${values.period} 已有结算单，已打开原单`);
+        navigate('settlements', created.settlement.id);
+    });
+    document.querySelector('#refresh-settlement')?.addEventListener('click', async () => {
+        try {
+            await post(`/settlements/${state.statement.settlement.id}/refresh`);
+            notify('草稿已按最新验收重算');
+            await load({keepPosition: true});
+        } catch (error) {
+            notify(error.message, true);
+        }
+    });
+    document.querySelector('#lock-settlement')?.addEventListener('click', async () => {
+        try {
+            await post(`/settlements/${state.statement.settlement.id}/lock`);
+            notify('结算单已锁定，旧账封存');
+            await load({keepPosition: true});
+        } catch (error) {
+            notify(error.message, true);
+        }
+    });
 }
 
 async function load({keepPosition = false} = {}) {
@@ -102,6 +138,8 @@ async function load({keepPosition = false} = {}) {
     if (!state.user) return showLogin();
     const current = ++revision;
     const {page, lotId, runId} = locationView();
+    const statementId = page === 'settlements' ? lotId : null;
+    const purchaser = isPurchaser();
     let selected = lotId;
     try {
         const lots = await request('/lots');
@@ -110,7 +148,17 @@ async function load({keepPosition = false} = {}) {
         let workspace = null;
         let report = null;
         let audit = [];
-        if (page !== 'lots' && selected) {
+        let statements = [];
+        let statement = null;
+        if (page === 'settlements') {
+            if (!purchaser) {
+                Object.assign(state, {lots, workspace, report, audit, statements, statement});
+                shell(page, selected, empty('采购结算仅限采购岗', '当前岗位没有按供货方结账的权限，请联系采购结算岗。', '#lots', '返回批号台账'));
+                return;
+            }
+            statements = await request('/settlements');
+            if (statementId) statement = await request(`/settlements/${statementId}`);
+        } else if (page !== 'lots' && selected) {
             workspace = await request(`/lots/${selected}`);
             if (page !== 'samples') {
                 const target = runId || workspace.inspections[0]?.id;
@@ -122,7 +170,7 @@ async function load({keepPosition = false} = {}) {
             }
         }
         if (current !== revision) return;
-        Object.assign(state, {lots, workspace, report, audit});
+        Object.assign(state, {lots, workspace, report, audit, statements, statement});
         shell(page, selected, pages[page]());
         bindActions();
         if (!keepPosition) window.scrollTo(0, 0);

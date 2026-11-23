@@ -12,6 +12,7 @@ export function loginPage() {
         <label>口令<input name="password" type="password" autocomplete="current-password" required></label>
         ${formError}<button class="button primary" type="submit">进入台账 <span aria-hidden="true">↗</span></button></form>
         <div class="demo-roles"><p>演示岗位</p><div><button type="button" data-demo="analyst">称重分析</button>
-        <button type="button" data-demo="reviewer">收料复核</button><button type="button" data-demo="observer">仓务观察</button></div></div>
+        <button type="button" data-demo="reviewer">收料复核</button><button type="button" data-demo="observer">仓务观察</button>
+        <button type="button" data-demo="purchaser">采购结算</button></div></div>
     </div></section></main>`;
 }

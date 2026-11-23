@@ -1,5 +1,6 @@
 export const sections = [
     ['lots', '批号台账'], ['samples', '称重记录'], ['diagnosis', '尾部诊断'], ['decisions', '收料决定'],
+    ['settlements', '采购结算'],
 ];
 
 export function locationView() {
