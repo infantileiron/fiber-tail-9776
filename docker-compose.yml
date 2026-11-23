@@ -1,0 +1,100 @@
+name: fiber-tail
+
+x-python-env: &python-env
+  PGHOST: db
+  PGDATABASE: fiber
+  PGUSER: fiber
+  PGPASSWORD: ${POSTGRES_PASSWORD:-fiber-local-db}
+  REDIS_URL: redis://redis:6379/0
+  JWT_SECRET: ${JWT_SECRET:-fiber-local-demo-token-key-use-a-private-secret-outside-demo}
+
+x-infra: &infra
+  db:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+
+services:
+  frontend:
+    build: ./frontend
+    container_name: ${COMPOSE_PROJECT_NAME:-fiber-tail}-frontend
+    ports:
+      - '127.0.0.1:${FRONTEND_PORT:-18270}:80'
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD-SHELL, 'wget -qO- http://127.0.0.1/api/health >/dev/null']
+      interval: 3s
+      timeout: 2s
+      retries: 15
+
+  backend:
+    build: ./backend
+    container_name: ${COMPOSE_PROJECT_NAME:-fiber-tail}-backend
+    environment:
+      <<: *python-env
+      SEED_DEMO: ${SEED_DEMO:-true}
+    ports:
+      - '127.0.0.1:${BACKEND_PORT:-19270}:8000'
+    volumes:
+      - work_state:/artifacts
+    depends_on: *infra
+    healthcheck:
+      test: [CMD, python, -c, "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 25
+
+  worker:
+    build: ./backend
+    container_name: ${COMPOSE_PROJECT_NAME:-fiber-tail}-worker
+    command: [python, -m, src.worker]
+    environment: *python-env
+    volumes:
+      - work_state:/artifacts
+    depends_on: *infra
+    healthcheck:
+      test: [CMD, python, -m, src.worker, health]
+      interval: 3s
+      timeout: 2s
+      retries: 25
+
+  db:
+    image: postgres:16-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-fiber-tail}-db
+    environment:
+      POSTGRES_DB: fiber
+      POSTGRES_USER: fiber
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fiber-local-db}
+    ports:
+      - '127.0.0.1:${DB_PORT:-17770}:5432'
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U fiber -d fiber -h 127.0.0.1']
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-fiber-tail}-redis
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 3s
+      timeout: 2s
+      retries: 15
+
+volumes:
+  database:
+  redis_data:
+  work_state:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${NETWORK_SUBNET:-10.221.201.0/24}
